@@ -1,37 +1,46 @@
 package org.example.steganography;
 
+import lombok.RequiredArgsConstructor;
+import org.example.encryption.EncryptionService;
+
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 
+import static org.example.Constants.BYTE_SIZE;
+@RequiredArgsConstructor
 public class LSBSteganography implements SteganographyService {
+
+    private final EncryptionService encryptionService;
     @Override
-    public BufferedImage embedMessage(String message, BufferedImage image) {
+    public BufferedImage embedMessage(String message, BufferedImage image) throws Exception {
+        String messageToEmbed = encryptionService.getKey() + encryptionService.encrypt(message);
         int width = image.getWidth();
         int height = image.getHeight();
 
-        ArrayList<Integer> messageBits = getMessageBits(message);
+        ArrayList<Integer> messageBits = getMessageBits(messageToEmbed);
         int numOfBits = messageBits.size();
 
         int pixelIndex = 0;
 
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
-                if (pixelIndex < messageBits.size() + 32) {
+                if (pixelIndex < numOfBits + BYTE_SIZE * 4) {
                     int pixel = image.getRGB(x, y);
-                    int red = (pixel >> 16) & 0xFF;
-                    int green = (pixel >> 8) & 0xFF;
+
+                    int red = (pixel >> BYTE_SIZE * 2) & 0xFF;
+                    int green = (pixel >> BYTE_SIZE) & 0xFF;
                     int blue = pixel & 0xFF;
 
-                    if (pixelIndex < 32) {
+                    if (pixelIndex < BYTE_SIZE * 4) {
                         red = (red & 0xFE) | numOfBits >> (31 - pixelIndex);
                     } else {
-                        int bitToHide = messageBits.get(pixelIndex - 32);
+                        int bitToHide = messageBits.get(pixelIndex - BYTE_SIZE * 4);
                         red = (red & 0xFE) | bitToHide;
                     }
-                    image.setRGB(x, y, (red << 16) | (green << 8) | blue);
+                    image.setRGB(x, y, (red << BYTE_SIZE * 2) | (green << BYTE_SIZE) | blue);
                     pixelIndex++;
                 } else {
-                    break; // Message embedded
+                    break;
                 }
             }
         }
@@ -39,12 +48,13 @@ public class LSBSteganography implements SteganographyService {
     }
 
     @Override
-    public String extractMessage(BufferedImage image) {
+    public String extractMessage(BufferedImage image) throws Exception {
 
         int width = image.getWidth();
         int height = image.getHeight();
 
         ArrayList<Integer> arrayList = new ArrayList<>();
+        ArrayList<Integer> keyCharList = new ArrayList<>();
         ArrayList<Integer> numOfBitsArray = new ArrayList<>();
 
         int pixelIndex = 0;
@@ -52,22 +62,35 @@ public class LSBSteganography implements SteganographyService {
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
                 int pixel = image.getRGB(x, y);
-                int bitValue = (pixel >> 16) & 0x01;
-                if (pixelIndex < 32) {
+                int bitValue = (pixel >> BYTE_SIZE * 2) & 0x01;
+                if (pixelIndex < BYTE_SIZE * 4) {
                     numOfBitsArray.add(bitValue);
-                } else if (getNumOfBits(numOfBitsArray) + 32 > pixelIndex) {
+                } else if (pixelIndex>=BYTE_SIZE*4&&pixelIndex<BYTE_SIZE*28) {
+                    keyCharList.add(bitValue);
+                } else if (getNumOfBits(numOfBitsArray) + BYTE_SIZE * 4 > pixelIndex) {
                     arrayList.add(bitValue);
                 }
                 pixelIndex++;
             }
         }
 
-        ArrayList<Byte> messageBytes = getMessageBytes(arrayList);
+        ArrayList<Byte> messageBytes = getExtractedBytes(arrayList);
+        ArrayList<Byte> keyBytes = getExtractedBytes(keyCharList);
 
-        return getExtractedMessage(messageBytes);
+        encryptionService.setKey(getExtractedString(keyBytes));
+
+        return encryptionService
+                .decrypt(getExtractedString(messageBytes));
     }
 
-    private String getExtractedMessage(ArrayList<Byte> messageBytes) {
+
+    @Override
+    public BufferedImage append(String message, BufferedImage image) throws Exception {
+        String existingMessage = extractMessage(image);
+        String newMessage = existingMessage + " " + message;
+        return embedMessage(newMessage,image);
+    }
+    private String getExtractedString(ArrayList<Byte> messageBytes) {
         byte[] byteArray = new byte[messageBytes.size()];
         for (int i = 0; i < messageBytes.size(); i++) {
             byteArray[i] = messageBytes.get(i);
@@ -76,7 +99,7 @@ public class LSBSteganography implements SteganographyService {
         return new String(byteArray);
     }
 
-    private ArrayList<Byte> getMessageBytes(ArrayList<Integer> arrayList) {
+    private ArrayList<Byte> getExtractedBytes(ArrayList<Integer> arrayList) {
 
         ArrayList<Byte> messageBytes = new ArrayList<>();
         byte charByte = 0;
@@ -109,10 +132,10 @@ public class LSBSteganography implements SteganographyService {
         return arrayList;
     }
 
-    private int getNumOfBits(ArrayList<Integer> numOfCharsList) {
+    private int getNumOfBits(ArrayList<Integer> numOfBitsList) {
         int numOfChars = 0;
         int bitIndex = 31;
-        for (int i : numOfCharsList) {
+        for (int i : numOfBitsList) {
             numOfChars |= ((i & 1) << bitIndex);
             bitIndex--;
         }
