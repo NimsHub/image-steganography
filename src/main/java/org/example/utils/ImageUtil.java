@@ -32,7 +32,7 @@ public class ImageUtil {
     }
 
     public static void saveImage(BufferedImage imgToSave, String location) throws IOException {
-        File outputFile = new File(location + "." + imageFormat);
+        File outputFile = new File(location + ".png");
         ImageIO.write(imgToSave, imageFormat, outputFile);
     }
 }

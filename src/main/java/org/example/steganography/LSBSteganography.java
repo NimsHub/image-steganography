@@ -1,23 +1,22 @@
 package org.example.steganography;
 
 import lombok.RequiredArgsConstructor;
-import org.example.encryption.EncryptionService;
 
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 
 import static org.example.Constants.BYTE_SIZE;
+
 @RequiredArgsConstructor
 public class LSBSteganography implements SteganographyService {
 
-    private final EncryptionService encryptionService;
+
     @Override
-    public BufferedImage embedMessage(String message, BufferedImage image) throws Exception {
-        String messageToEmbed = encryptionService.getKey() + encryptionService.encrypt(message);
+    public BufferedImage embedContent(String message, BufferedImage image) {
+
         int width = image.getWidth();
         int height = image.getHeight();
-
-        ArrayList<Integer> messageBits = getMessageBits(messageToEmbed);
+        ArrayList<Integer> messageBits = getMessageBits(message);
         int numOfBits = messageBits.size();
 
         int pixelIndex = 0;
@@ -48,7 +47,7 @@ public class LSBSteganography implements SteganographyService {
     }
 
     @Override
-    public String extractMessage(BufferedImage image) throws Exception {
+    public Content extractContent(BufferedImage image) {
 
         int width = image.getWidth();
         int height = image.getHeight();
@@ -65,7 +64,7 @@ public class LSBSteganography implements SteganographyService {
                 int bitValue = (pixel >> BYTE_SIZE * 2) & 0x01;
                 if (pixelIndex < BYTE_SIZE * 4) {
                     numOfBitsArray.add(bitValue);
-                } else if (pixelIndex>=BYTE_SIZE*4&&pixelIndex<BYTE_SIZE*28) {
+                } else if (pixelIndex >= BYTE_SIZE * 4 && pixelIndex < BYTE_SIZE * 48) {
                     keyCharList.add(bitValue);
                 } else if (getNumOfBits(numOfBitsArray) + BYTE_SIZE * 4 > pixelIndex) {
                     arrayList.add(bitValue);
@@ -77,19 +76,15 @@ public class LSBSteganography implements SteganographyService {
         ArrayList<Byte> messageBytes = getExtractedBytes(arrayList);
         ArrayList<Byte> keyBytes = getExtractedBytes(keyCharList);
 
-        encryptionService.setKey(getExtractedString(keyBytes));
-
-        return encryptionService
-                .decrypt(getExtractedString(messageBytes));
+        return Content.builder()
+                .key(getExtractedString(keyBytes))
+                .message(getExtractedString(messageBytes))
+                .build();
     }
 
 
-    @Override
-    public BufferedImage append(String message, BufferedImage image) throws Exception {
-        String existingMessage = extractMessage(image);
-        String newMessage = existingMessage + " " + message;
-        return embedMessage(newMessage,image);
-    }
+
+
     private String getExtractedString(ArrayList<Byte> messageBytes) {
         byte[] byteArray = new byte[messageBytes.size()];
         for (int i = 0; i < messageBytes.size(); i++) {
